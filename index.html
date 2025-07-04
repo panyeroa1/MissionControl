@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mission Control</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #000000; color: #C9D1D9; }
+        #glitter-bg { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; overflow: hidden; }
+        .glitter { position: absolute; width: 2px; height: 2px; background-color: white; border-radius: 50%; opacity: 0; animation: glitter-fall infinite; }
+        @keyframes glitter-fall {
+            0% { transform: translateY(-10vh) scale(0.5); opacity: 0; }
+            50% { opacity: 1; }
+            100% { transform: translateY(110vh) scale(1.2); opacity: 0; }
+        }
+        .sidebar { background-color: #161B22; border-right: 1px solid #30363D; }
+        .main-content { background-color: rgba(0,0,0,0.5); backdrop-filter: blur(2px); }
+        .card { background-color: #161B22; border: 1px solid #30363D; border-radius: 0.5rem; }
+        .nav-link { color: #8B949E; transition: all 0.2s ease-in-out; }
+        .nav-link:hover { background-color: #21262D; color: #C9D1D9; }
+        .nav-link.active { background-color: #0D1117; color: #F0F6FC; border-left: 3px solid #58A6FF; padding-left: calc(1rem - 3px); }
+        .page { display: none; }
+        .page.active { display: block; }
+        .btn-primary { background-color: #238636; color: white; padding: 8px 16px; border-radius: 6px; font-weight: 500; transition: background-color 0.2s; }
+        .btn-primary:hover { background-color: #2EA043; }
+        .btn-primary:disabled { background-color: #23863680; cursor: not-allowed; }
+        .btn-secondary { background-color: #21262D; color: #C9D1D9; padding: 4px 10px; border-radius: 6px; border: 1px solid #30363D; font-weight: 500; transition: all 0.2s; font-size: 0.875rem; }
+        .btn-secondary:hover { background-color: #30363D; border-color: #8B949E; }
+        .btn-secondary:disabled { background-color: #21262d80; color: #8b949e80; cursor: not-allowed; }
+        .console-box { background-color: #010409; font-family: 'Roboto Mono', 'SF Mono', 'Consolas', 'Menlo', monospace; padding: 1rem; border-radius: 6px; border: 1px solid #30363D; min-height: 100px; white-space: pre-wrap; line-height: 1.6; color: #8B949E; overflow-x: auto; }
+        .console-box .console-text { color: #C9D1D9; }
+        .blinking-cursor { animation: blink 1s step-end infinite; color: #58A6FF; }
+        @keyframes blink { 50% { opacity: 0 } }
+        .toggle-label { position: relative; display: inline-flex; align-items: center; cursor: pointer; }
+        .toggle-input { opacity: 0; width: 0; height: 0; }
+        .toggle-slider { width: 44px; height: 24px; background-color: #30363D; border-radius: 12px; transition: background-color 0.2s; position: relative; }
+        .toggle-slider:before { content: ""; position: absolute; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: #8B949E; border-radius: 50%; transition: .2s; }
+        .toggle-input:checked + .toggle-slider { background-color: #238636; }
+        .toggle-input:checked + .toggle-slider:before { background-color: white; transform: translateX(20px); }
+        .analyzer-output-console { border-top: 1px solid #30363D; margin-top: 1rem; padding-top: 1rem; }
+    </style>
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database-compat.js"></script>
+    <!-- Mermaid.js for rendering charts -->
+    <script type="module">
+        import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+        mermaid.initialize({ startOnLoad: false, theme: 'dark', "fontFamily": "Inter, sans-serif" });
+        window.mermaid = mermaid;
+    </script>
+</head>
+<body>
+    <div id="glitter-bg"></div>
+    <div class="relative min-h-screen flex flex-col lg:flex-row">
+        <!-- Mobile Header -->
+        <div class="lg:hidden flex justify-between items-center p-4 bg-[#161B22] border-b border-[#30363D]">
+            <div class="flex items-center gap-3">
+                 <div class="w-8 h-8 bg-gradient-to-br from-cyan-400 to-blue-500 flex items-center justify-center rounded-md"><span class="font-bold text-white text-lg">M</span></div>
+                 <h1 class="text-lg font-semibold text-white tracking-wider">MISSION CONTROL</h1>
+            </div>
+            <button id="mobile-menu-btn" class="text-gray-400">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7"></path></svg>
+            </button>
+        </div>
+        
+        <!-- Sidebar -->
+        <aside id="sidebar" class="sidebar fixed inset-y-0 left-0 w-64 p-6 flex-col justify-between transform -translate-x-full lg:relative lg:translate-x-0 lg:flex transition-transform duration-300 ease-in-out z-20">
+            <div>
+                <div class="hidden lg:flex items-center gap-3 mb-10">
+                    <div class="w-8 h-8 bg-gradient-to-br from-cyan-400 to-blue-500 flex items-center justify-center rounded-md"><span class="font-bold text-white text-lg">M</span></div>
+                    <h1 class="text-lg font-semibold text-white tracking-wider">MISSION CONTROL</h1>
+                </div>
+                <nav class="flex flex-col gap-2">
+                    <a href="#" class="nav-link flex items-center gap-3 px-4 py-2 rounded-md" data-target="dashboard"><span>Dashboard</span></a>
+                    <a href="#" class="nav-link flex items-center gap-3 px-4 py-2 rounded-md" data-target="meetings"><span>Meetings</span></a>
+                    <a href="#" class="nav-link flex items-center gap-3 px-4 py-2 rounded-md active" data-target="transcription"><span>Transcription</span></a>
+                    <a href="#" class="nav-link flex items-center gap-3 px-4 py-2 rounded-md" data-target="analyses"><span>Analyses</span></a>
+                    <a href="#" class="nav-link flex items-center gap-3 px-4 py-2 rounded-md" data-target="tasks"><span>Tasks</span></a>
+                    <a href="#" class="nav-link flex items-center gap-3 px-4 py-2 rounded-md" data-target="projects"><span>Projects</span></a>
+                </nav>
+            </div>
+            <div><a href="#" class="nav-link flex items-center gap-3 px-4 py-2 rounded-md" data-target="settings"><span>Settings</span></a></div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content flex-1 p-4 lg:p-8 overflow-y-auto">
+            <div id="dashboard" class="page"><h2 class="text-3xl font-bold text-white mb-8">Dashboard</h2><p>Dashboard content will be loaded here dynamically.</p></div>
+            <div id="meetings" class="page"><h2 class="text-3xl font-bold text-white mb-8">Meetings</h2><p>Meeting list will be loaded here dynamically.</p></div>
+            <div id="analyses" class="page"><h2 class="text-3xl font-bold text-white mb-8">Analyses</h2><p>Analysis history will be loaded here dynamically.</p></div>
+            <div id="tasks" class="page"><h2 class="text-3xl font-bold text-white mb-8">Tasks</h2><p>Task board will be loaded here dynamically.</p></div>
+            <div id="projects" class="page"><h2 class="text-3xl font-bold text-white mb-8">Projects</h2><p>Project overview will be loaded here dynamically.</p></div>
+            <div id="settings" class="page"><h2 class="text-3xl font-bold text-white mb-8">Settings</h2><p>User and application settings will be here.</p></div>
+            
+            <div id="transcription" class="page active">
+                <h2 class="text-3xl font-bold text-white mb-8">Transcription & Analysis</h2>
+                <div class="space-y-8">
+                    <div id="transcript-container" class="card p-6">
+                         <h3 class="text-lg font-semibold text-white mb-6">Source Meeting Transcript</h3>
+                        <div id="transcript-text" class="space-y-6 text-sm">
+                            <p class="text-gray-400"><strong>Alex Dev:</strong> Alright team, let's get started. Thanks for joining the product roadmap update. The main goal today is to align on the priorities for the next quarter. We need to focus on delivering the new analytics dashboard and also address the performance issues in the mobile app that users have been reporting. It's crucial we get the data integration for the dashboard right from the start.</p>
+                            <p class="text-gray-400"><strong>Sarah Project:</strong> Sounds good. I've shared the preliminary document. The key initiatives are the new analytics dashboard and the mobile app performance improvements. For the dashboard, we need a clear UI/UX flow before development begins. For the performance, we need to analyze the current bottlenecks. We should probably create a flowchart of the current system to identify weak points.</p>
+                            <p class="text-gray-400"><strong>Master E:</strong> Excellent. Alex, regarding the dashboard, what's the status of the data integration? We need to ensure the backend can support the real-time queries we've planned. Define the API endpoints clearly. What database schema are you proposing? This will impact the entire system. Let's make sure the technical stack is scalable enough for future features. Also consider security from day one.</p>
+                            <p class="text-gray-400"><strong>Alex Dev:</strong> The agent backend team has already provisioned the necessary endpoints. We've completed initial tests, and performance is within acceptable limits. I'll create a task to finalize the database schema and link it to this meeting's analysis. We also need to define the core purpose more clearly and break down all these high-level goals into smaller, manageable development tasks for the team. The AI model integration needs to be specified too.</p>
+                        </div>
+                    </div>
+
+                    <div class="card p-6 space-y-4">
+                        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                            <h3 class="text-lg font-semibold text-white">AI Agent Controls</h3>
+                            <div class="flex items-center gap-4 sm:gap-6 flex-wrap">
+                                <label class="toggle-label" title="Automate Orchestrator"><span class="text-sm mr-2">Orchestrate</span><input type="checkbox" id="auto-orchestrate-toggle" class="toggle-input"><span class="toggle-slider"></span></label>
+                                <label class="toggle-label" title="Automate Analyzers"><span class="text-sm mr-2">Analyze</span><input type="checkbox" id="auto-analyze-toggle" class="toggle-input"><span class="toggle-slider"></span></label>
+                                <label class="toggle-label" title="Automate Project Plan"><span class="text-sm mr-2">Plan</span><input type="checkbox" id="auto-plan-toggle" class="toggle-input"><span class="toggle-slider"></span></label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="orchestrator-container" class="card p-6 space-y-4 hidden">
+                        <h3 class="text-lg font-semibold text-white">Orchestrator</h3>
+                        <div id="orchestrator-console" class="console-box"><span class="console-text"></span><span class="blinking-cursor">|</span></div>
+                        <div class="flex justify-end"><button id="runOrchestratorBtn" class="btn-primary mt-4">RUN Orchestrator</button></div>
+                    </div>
+                    <div id="analyzer-consoles-container" class="space-y-8"></div>
+                    <div id="mission-executive-container" class="card p-6 space-y-4 hidden">
+                        <h3 class="text-2xl font-bold text-white">Mission Executive Synthesis</h3>
+                        <div id="mission-executive-console" class="console-box"><span class="console-text"></span><span class="blinking-cursor">|</span></div>
+                    </div>
+                     <div id="project-master-container" class="card p-6 space-y-4 hidden">
+                        <h3 class="text-2xl font-bold text-white">Project Master Plan (README.md)</h3>
+                        <div id="project-master-console" class="console-box"><div class="console-text"></div><span class="blinking-cursor">|</span></div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script type="module">
+        // --- SDK INITIALIZATION ---
+        const firebaseConfig = { apiKey: "AIzaSyBe9a58zaQCrBSGeWwcIVa_PnZABoH6zV4", authDomain: "tudds-ccd0wn.firebaseapp.com", databaseURL: "https://tudds-ccd0wn-default-rtdb.asia-southeast1.firebasedatabase.app", projectId: "tudds-ccd0wn", storageBucket: "tudds-ccd0wn.appspot.com", messagingSenderId: "786974954352", appId: "1:786974954352:web:5f933f5a2f9f386d9bb5b5" };
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+        
+        // --- CORE CONFIGURATION & SYSTEM PROMPTS ---
+        const GEMINI_API_KEY = "";
+        const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`;
+        const ANALYZER_DEFINITIONS = { 'app-overview': { title: 'App Overview Analyzer', prompt: 'Your task is to analyze the provided meeting transcript to produce a concise, high-level executive summary of the application being discussed. Distill the conversation to its absolute essence. Your output must clearly define: 1. The Core Problem: What specific user or business problem is this application trying to solve? 2. The Solution: What is the proposed application and what is its core value proposition? 3. Target Audience: Who are the primary users of this application? Be specific (e.g., "internal marketing teams," "external enterprise customers"). 4. Key Takeaway: A single sentence that encapsulates the most critical outcome or goal of the project as discussed in the meeting. The final output should be formatted in clean markdown, be easily digestible in under 60 seconds, and avoid technical jargon unless it is fundamental to the concept.' }, 'ai-model-integration': { title: 'AI Model Integration Analyzer', prompt: 'Your objective is to meticulously detail the AI integration strategy based on the meeting transcript. Identify every mention of AI, large language models (LLMs), or automated agents. Your analysis must produce a technical specification document covering: 1. Model Identification: List all AI models mentioned (e.g., Gemini, Claude) and their intended roles. 2. API Interaction Points: Define the key functions where the application will call an AI model. For each function, specify the triggers, the nature of the input data (e.g., "raw text transcript," "JSON object with user query"), and the expected structure of the AI\'s output (e.g., "JSON with extracted tasks," "natural language summary"). 3. Agentic Behavior: Document any instances where an "agent" is expected to perform multi-step tasks. Describe the sequence of operations. 4. Data Flow: Map the data journey from the user-facing application, to the agent backend, to the AI model API, and back. Focus on data formats and transformations at each step.' }, 'core-purpose': { title: 'Core Purpose & Goal Analyzer', prompt: 'Analyze the transcript to define the project\'s foundational purpose and establish a set of SMART (Specific, Measurable, Achievable, Relevant, Time-bound) goals. Go beyond the surface-level feature descriptions. Your output must differentiate between and clearly articulate: 1. Business Objectives: What are the high-level commercial or strategic goals for the organization? (e.g., "Increase user retention by 15% within 6 months," "Automate 50% of manual reporting tasks by Q4"). 2. User Goals: What are the primary objectives for the end-users of the application? (e.g., "Quickly find relevant meeting insights," "Collaborate more efficiently on project tasks"). 3. Key Performance Indicators (KPIs): For each business objective, identify specific metrics that will be used to measure success (e.g., "daily active users," "task completion rate," "time-to-insight"). Your analysis is critical for ensuring the final product is aligned with strategic intent.' }, 'ui-ux-flow': { title: 'UI/UX Flow & Logic Analyzer', prompt: 'Function as a UI/UX expert. Your mission is to analyze the transcript to map out the primary user journeys and interaction flows. You are not designing the UI, but defining its logic and sequence. Your output should be a step-by-step narrative describing how a user accomplishes key tasks. Select at least two core user flows discussed in the meeting (e.g., "Analyzing a new meeting," "Creating and assigning a task from an analysis"). For each flow, detail: 1. Starting Point: Where does the user begin this journey? 2. Step-by-Step Actions: List every user action (e.g., "clicks \'Run Orchestrator\' button," "fills out the task title field," "selects an assignee from a dropdown"). 3. System Responses: Describe the immediate feedback or change in the interface after each action. 4. Decision Points: Highlight any choices the user must make that alter the path. 5. End Goal: What is the successful conclusion of this flow?' }, 'flow-chart': { title: 'Flow Chart Analyzer', prompt: 'Your role is to analyze the entire system architecture and data flow as described in the meeting and produce a visual representation using Mermaid.js syntax. This is not a user flow, but a technical system diagram. Your analysis must identify the key components (e.g., Google Calendar, Meeting Bot, S3 Storage, API, Gemini, Database, Project Management App) and the interactions between them. The generated Mermaid.js code should be a `graph TD` (top-down flowchart) that clearly illustrates: 1. Triggers: What event initiates a process? (e.g., "Calendar Event Created"). 2. Services: Represent each major component of the system as a node. 3. Data Flow: Use arrows to show the path of data moving between services. Label the arrows to indicate the type of data being transferred (e.g., "Audio File," "JSON Transcript," "Analysis Results"). 4. Decision Points: If there are conditional paths, represent them using diamond-shaped nodes. The final output must be only the raw, valid Mermaid.js code block.' }, 'tech-stack': { title: 'Technical Stack Suggester Analyzer', prompt: 'Act as a lead solutions architect. Based on the transcript, including feature requirements, user scale, and any mentions of performance or data handling, propose a complete and justified technical stack. Your recommendation must be comprehensive. Address each of the following layers: 1. Frontend: Propose a framework (e.g., React, Vue, Svelte with Next.js/Nuxt) and justify why it fits the project\'s interactivity and SEO needs. 2. Backend: Recommend a language and framework (e.g., Node.js with Express, Python with FastAPI, Go) and explain why it suits the API requirements and potential for AI integration. 3. Database: Suggest a database type (e.g., PostgreSQL for relational data, MongoDB for flexible documents) and reason based on the data structures implied in the meeting. 4. Cloud & Deployment: Propose a cloud provider (e.g., Vercel, AWS, Google Cloud) and a deployment strategy, considering ease of use, scalability, and cost.' }, 'database-schema': { title: 'Database Schema Design Analyzer', prompt: 'Your role is to function as a database administrator. Analyze the transcript to derive a logical database schema. Identify all the core data entities discussed (e.g., users, meetings, tasks, analyses, projects, repositories). Your output should be a detailed schema definition, presented in SQL Data Definition Language (DDL) format for clarity. For each table, you must: 1. Define Columns: Specify all necessary fields with appropriate data types (e.g., `VARCHAR(255)`, `INT`, `TEXT`, `TIMESTAMP WITH TIME ZONE`, `BOOLEAN`, `UUID`). 2. Primary & Foreign Keys: Clearly denote the primary key for each table and establish all relationships using foreign key constraints (e.g., a `tasks` table should have a `meeting_id` that references the `meetings` table). 3. Indexes: Suggest potential indexes on columns that are likely to be queried frequently, such as foreign keys or status fields, to ensure performance.' }, 'api-specification': { title: 'API Endpoint Specification Analyzer', prompt: 'Your task is to serve as a backend engineering lead, translating the feature requirements from the meeting into a formal API specification. Based on the interactions described, define the necessary RESTful API endpoints. Your output must be a markdown document formatted for clarity and usability by both front-end and back-end developers. For each endpoint, you must specify: 1. HTTP Method and URL: (e.g., `POST /api/v1/tasks`). 2. Description: A clear explanation of what the endpoint does. 3. Request Body: A JSON object example showing the expected structure and data types of the payload. 4. Success Response: The HTTP status code (e.g., `201 Created`) and a JSON object example of the data returned on success. 5. Error Responses: At least two potential error cases, including their status codes (e.g., `400 Bad Request`, `404 Not Found`) and the structure of the error message JSON.' }, 'task-breakdown': { title: 'Task Breakdown & Estimation Analyzer', prompt: 'Act as the lead project manager. Synthesize the outputs of all other analyses to create a granular, actionable list of development tasks. Your primary goal is to translate high-level features into concrete work items ready for a sprint. Your output must be a markdown table with the following columns: 1. Task/User Story: A clear, concise description of the work to be done (e.g., "Develop API endpoint for creating tasks"). 2. Epic: The larger feature or module this task belongs to (e.g., "Task Management"). 3. Estimated Effort: Provide a relative size estimate using T-shirt sizes (XS, S, M, L, XL) to indicate complexity and time. 4. Suggested Assignee: Based on roles mentioned in the meeting (e.g., "Alex Dev," "Backend Team," "Frontend Team"), suggest who might be best suited to handle the task. This final breakdown is the bridge between planning and execution.' }, 'security-vulnerability': { title: 'Security & Vulnerability Analyzer', prompt: 'Your role is a cybersecurity specialist. Scrutinize the meeting transcript for any mention of user data, authentication, permissions, or external integrations. Your analysis must produce a security checklist that identifies potential vulnerabilities and recommends mitigation strategies. Address the following: 1. Authentication & Authorization: How are users authenticated? Are roles and permissions discussed? Recommend best practices like OAuth2, JWT, and role-based access control (RBAC). 2. Data Security: How is sensitive data handled? Recommend encryption at rest and in transit. Identify any PII (Personally Identifiable Information) discussed. 3. API Security: Are there any potential risks with the proposed API endpoints? Recommend rate limiting, input validation, and secure headers. 4. Dependency Security: Note the proposed tech stack and recommend regular dependency scanning.' } };
+        const ORCHESTRATOR_SYSTEM_PROMPT = `You are the master Orchestrator AI for Mission Control. You are an expert project manager and systems architect. Your input is a raw transcript from a technical or product development meeting. Your task is twofold: 1. **Deep Analysis**: First, you must conduct a deep, intelligent analysis of the transcript. Synthesize the key themes, challenges, decisions, and unspoken requirements into a comprehensive overview. Your analysis must be insightful, at least 1200 characters long, and structured with clear markdown headings (e.g., ### Executive Summary, ### Key Technical Challenges, ### Identified User Needs). 2. **Analyzer Selection**: Second, based ONLY on your own analysis of the transcript, you must determine which specialized sub-analyzers are required to fully break down the project. You must select a minimum of 10 relevant analyzers from the provided list. Your final output MUST be a single, valid JSON object, and NOTHING ELSE. Do not wrap it in markdown backticks or any other text. The JSON object must have two top-level keys: "analysis" (a string containing your full, detailed 1200+ character analysis in markdown format) and "required_analyzers" (an array of strings, where each string is the exact name (key) of a required analyzer from this list: [${Object.keys(ANALYZER_DEFINITIONS).join(', ')}])`;
+        const MISSION_EXECUTIVE_SYSTEM_PROMPT = `You are the Mission Executive, a C-level strategist AI. Your input consists of an original meeting transcript followed by a series of detailed analyses from specialized AI agents. Your task is to synthesize ALL of this information into a single, cohesive, and actionable executive briefing. Your output should merge the findings, resolve any minor discrepancies between analyses, and present a unified strategic plan. Structure your response with clear, bold markdown headings like '**Overall Project Vision**', '**Key Strategic Pillars**', '**Critical Path & Dependencies**', and '**Final Recommendations**'. This is the master document that will guide the entire project. Ensure the output is comprehensive, professional, and provides a clear path forward.`;
+        const PROJECT_MASTER_SYSTEM_PROMPT = `You are the Project Master AI, an expert technical writer and project planner. Your input is a final executive summary from the 'Mission Executive' AI. Your task is to generate a comprehensive, project-kickoff \`README.md\` file in markdown format. The output MUST include: 1. A project title and a one-sentence summary. 2. A 'System Architecture' section containing a Mermaid.js flowchart (\`graph TD\`) that visualizes the main components and data flows. 3. A 'Key Features' section listing the core functionalities. 4. A 'Proposed Tech Stack' section. 5. An 'Initial Task List' section with a markdown table of epics and high-level tasks. Your output must be only the complete, raw markdown text. The Mermaid diagram should be enclosed in a \`\`\`mermaid code block.`;
+        
+        // --- GLOBAL STATE ---
+        let appState = { meetingId: null, isOrchestrationRunning: false, isAnalysisRunning: false, isPlanningRunning: false, analyzerQueue: [], analysisResults: {} };
+
+        // --- ELEMENT SELECTORS ---
+        const allPages = document.querySelectorAll('.page');
+        const navLinks = document.querySelectorAll('.nav-link');
+        const autoOrchestrateToggle = document.getElementById('auto-orchestrate-toggle');
+        const autoAnalyzeToggle = document.getElementById('auto-analyze-toggle');
+        const autoPlanToggle = document.getElementById('auto-plan-toggle');
+        const runOrchestratorBtn = document.getElementById('runOrchestratorBtn');
+        const orchestratorContainer = document.getElementById('orchestrator-container');
+        const orchestratorTextEl = document.querySelector('#orchestrator-console .console-text');
+        const analyzerContainer = document.getElementById('analyzer-consoles-container');
+        const transcriptTextEl = document.getElementById('transcript-text');
+        const missionExecutiveContainer = document.getElementById('mission-executive-container');
+        const missionExecutiveTextEl = document.querySelector('#mission-executive-console .console-text');
+        const projectMasterContainer = document.getElementById('project-master-container');
+        const projectMasterTextEl = document.querySelector('#project-master-console .console-text');
+
+        // --- UTILITY & API FUNCTIONS ---
+        const sleep = ms => new Promise(res => setTimeout(res, ms));
+        async function typeText(element, text, speed = 1) {
+            element.innerHTML = ''; const sanitizedText = text || ''; let markdownBuffer = '';
+            for (const char of sanitizedText) {
+                markdownBuffer += char;
+                let html = markdownBuffer.replace(/### (.*)/g, '<h3 class="text-lg font-semibold text-white mt-4 mb-2">$1</h3>').replace(/\*\*([^*]+)\*\*/g, '<strong class="text-white">$1</strong>').replace(/^-\s(.*$)/gm, '<li class="ml-4 list-disc">$1</li>').replace(/`([^`]+)`/g, '<code class="bg-gray-700 text-cyan-300 px-1 py-0.5 rounded text-sm">$1</code>');
+                element.innerHTML = html; element.parentElement.scrollTop = element.parentElement.scrollHeight;
+                await sleep(speed);
+            }
+        }
+        function extractJson(text) {
+            const match = text.match(/\{[\s\S]*\}/);
+            return match ? match[0] : null;
+        }
+        async function callGemini(prompt) {
+            const body = { contents: [{ parts: [{ text: prompt }] }] };
+            const response = await fetch(GEMINI_API_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+            if (!response.ok) { const errorBody = await response.text(); throw new Error(`API Error: ${response.status} ${response.statusText} - ${errorBody}`); }
+            const data = await response.json();
+            if (data.candidates && data.candidates[0].content && data.candidates[0].content.parts[0]) return data.candidates[0].content.parts[0].text;
+            throw new Error("Invalid API response structure.");
+        }
+        function setDbData(path, data) { firebase.database().ref(path).set(data).catch(e => console.error("Firebase write failed:", e)); }
+
+        // --- CORE WORKFLOW FUNCTIONS ---
+        async function runOrchestration() {
+            if (appState.isOrchestrationRunning) return;
+            appState = { ...appState, isOrchestrationRunning: true, analysisResults: {}, meetingId: `meeting_${Date.now()}` };
+            runOrchestratorBtn.disabled = true; orchestratorContainer.classList.remove('hidden'); analyzerContainer.innerHTML = ''; missionExecutiveContainer.classList.add('hidden'); projectMasterContainer.classList.add('hidden');
+            let responseData;
+            try {
+                await typeText(orchestratorTextEl, 'Initializing... Accessing transcript and calling Orchestrator AI...', 10);
+                const transcript = transcriptTextEl.innerText;
+                setDbData(`meetings/${appState.meetingId}/transcript`, transcript);
+                const prompt = `${ORCHESTRATOR_SYSTEM_PROMPT}\n\nTranscript:\n${transcript}`;
+                const responseText = await callGemini(prompt);
+                const jsonText = extractJson(responseText);
+                if (!jsonText) throw new Error("No valid JSON object found in the model's response.");
+                responseData = JSON.parse(jsonText);
+                setDbData(`meetings/${appState.meetingId}/orchestrator`, responseData);
+            } catch (error) { handleWorkflowError("Orchestrator", orchestratorTextEl, error); return; }
+            await typeText(orchestratorTextEl, responseData.analysis, 5);
+            document.querySelector('#orchestrator-console .blinking-cursor').style.display = 'none';
+            appState.analyzerQueue = responseData.required_analyzers;
+            displayAnalyzers();
+            appState.isOrchestrationRunning = false;
+            if (autoAnalyzeToggle.checked) await runAllAnalyzers();
+        }
+
+        function displayAnalyzers() {
+            analyzerContainer.innerHTML = '';
+            appState.analyzerQueue.forEach(key => {
+                const analyzer = ANALYZER_DEFINITIONS[key]; if (!analyzer) return;
+                const card = document.createElement('div'); card.id = `analyzer-card-${key}`; card.className = "card p-6 space-y-4";
+                card.innerHTML = `<div class="flex justify-between items-center"><h3 class="text-lg font-semibold text-white">${analyzer.title}</h3><button class="btn-secondary run-analyzer-btn" data-key="${key}">Run</button></div><div class="console-box system-prompt-console"><p class="text-sm font-bold text-gray-500 mb-2">SYSTEM PROMPT</p><span>${analyzer.prompt}</span></div><div class="analyzer-output-console console-box hidden"><p class="text-sm font-bold text-gray-500 mb-2">ANALYSIS</p><span class="console-text"></span><span class="blinking-cursor">|</span></div>`;
+                analyzerContainer.appendChild(card);
+            });
+            document.querySelectorAll('.run-analyzer-btn').forEach(btn => btn.addEventListener('click', (e) => runSingleAnalyzer(e.target.dataset.key, false)));
+            if (autoAnalyzeToggle.checked) document.querySelectorAll('.run-analyzer-btn').forEach(btn => btn.classList.add('hidden'));
+        }
+
+        async function runSingleAnalyzer(key, isAuto = false) {
+            if (!key || appState.analysisResults[key]) return;
+            const card = document.getElementById(`analyzer-card-${key}`); const btn = card.querySelector('.run-analyzer-btn'); const outputConsole = card.querySelector('.analyzer-output-console'); const outputText = outputConsole.querySelector('.console-text');
+            btn.disabled = true; outputConsole.classList.remove('hidden');
+            let analysisText;
+            try {
+                await typeText(outputText, 'Calling specialist AI agent...', 10);
+                const transcript = transcriptTextEl.innerText;
+                const prompt = `${ANALYZER_DEFINITIONS[key].prompt}\n\nReference Transcript:\n${transcript}`;
+                analysisText = await callGemini(prompt);
+                setDbData(`meetings/${appState.meetingId}/analyses/${key}`, { prompt, analysis: analysisText });
+            } catch (error) { handleWorkflowError(`Analyzer (${key})`, outputText, error); btn.disabled = false; return; }
+            await typeText(outputText, analysisText, 5);
+            outputConsole.querySelector('.blinking-cursor').style.display = 'none';
+            appState.analysisResults[key] = analysisText;
+            if (isAuto && Object.keys(appState.analysisResults).length === appState.analyzerQueue.length) await runMissionExecutive();
+        }
+        
+        async function runAllAnalyzers() {
+            if(appState.isAnalysisRunning) return;
+            appState.isAnalysisRunning = true;
+            for (const key of appState.analyzerQueue) await runSingleAnalyzer(key, true);
+            appState.isAnalysisRunning = false;
+        }
+
+        async function runMissionExecutive() {
+            missionExecutiveContainer.classList.remove('hidden'); let summaryText;
+            try {
+                await typeText(missionExecutiveTextEl, 'Synthesizing all analyses... Calling Mission Executive AI...', 10);
+                const transcript = transcriptTextEl.innerText; const combinedAnalyses = Object.entries(appState.analysisResults).map(([key, analysis]) => `--- ANALYSIS FROM: ${ANALYZER_DEFINITIONS[key].title} ---\n${analysis}`).join('\n\n');
+                const prompt = `${MISSION_EXECUTIVE_SYSTEM_PROMPT}\n\n--- ORIGINAL MEETING TRANSCRIPT ---\n${transcript}\n${combinedAnalyses}`;
+                summaryText = await callGemini(prompt);
+                setDbData(`meetings/${appState.meetingId}/missionExecutive`, { prompt, summary: summaryText });
+            } catch (error) { handleWorkflowError("Mission Executive", missionExecutiveTextEl, error); return; }
+            await typeText(missionExecutiveTextEl, summaryText, 5);
+            missionExecutiveContainer.querySelector('.blinking-cursor').style.display = 'none';
+            if (autoPlanToggle.checked) await runProjectMaster(summaryText);
+        }
+
+        async function runProjectMaster(executiveSummary) {
+            if(appState.isPlanningRunning) return;
+            appState.isPlanningRunning = true; projectMasterContainer.classList.remove('hidden'); let readmeText;
+            try {
+                await typeText(projectMasterTextEl, 'Generating project plan... Calling Project Master AI...', 10);
+                const prompt = `${PROJECT_MASTER_SYSTEM_PROMPT}\n\n--- MISSION EXECUTIVE SUMMARY ---\n${executiveSummary}`;
+                readmeText = await callGemini(prompt);
+                setDbData(`meetings/${appState.meetingId}/projectMaster`, { prompt, readme: readmeText });
+            } catch (error) { handleWorkflowError("Project Master", projectMasterTextEl, error); return; }
+            await typeText(projectMasterTextEl, readmeText, 5);
+            projectMasterContainer.querySelector('.blinking-cursor').style.display = 'none';
+            const mermaidCode = readmeText.match(/```mermaid\n([\s\S]*?)\n```/);
+            if (mermaidCode && mermaidCode[1]) {
+                 try {
+                    const { svg } = await window.mermaid.render('mermaid-svg-' + Date.now(), mermaidCode[1]);
+                    const renderedChart = document.createElement('div'); renderedChart.innerHTML = svg;
+                    const preBlock = projectMasterTextEl.querySelector('pre');
+                    if(preBlock) preBlock.parentElement.replaceChild(renderedChart, preBlock);
+                 } catch (e) { console.error("Mermaid rendering failed:", e); }
+            }
+            appState.isPlanningRunning = false;
+        }
+
+        function handleWorkflowError(stage, element, error) {
+            console.error(`${stage} Error:`, error); typeText(element, `Error: ${stage} failed.\n${error.message}`, 10);
+            if (stage === "Orchestrator") { appState.isOrchestrationRunning = false; runOrchestratorBtn.disabled = false; }
+        }
+
+        // --- EVENT LISTENERS & INITIALIZATION ---
+        function setupPage() {
+            // Glitter effect
+            const glitterBg = document.getElementById('glitter-bg');
+            for (let i = 0; i < 50; i++) {
+                const glitter = document.createElement('div');
+                glitter.className = 'glitter';
+                glitter.style.left = `${Math.random() * 100}vw`;
+                glitter.style.animationDuration = `${2 + Math.random() * 3}s`;
+                glitter.style.animationDelay = `${Math.random() * 5}s`;
+                glitterBg.appendChild(glitter);
+            }
+            // Mobile menu
+            const sidebar = document.getElementById('sidebar');
+            document.getElementById('mobile-menu-btn').addEventListener('click', () => sidebar.classList.toggle('-translate-x-full'));
+            // Toggles
+            autoOrchestrateToggle.addEventListener('change', (e) => { orchestratorContainer.classList.toggle('hidden', !e.target.checked); runOrchestratorBtn.classList.toggle('hidden', e.target.checked); if (e.target.checked) runOrchestration(); });
+            autoAnalyzeToggle.addEventListener('change', (e) => { document.querySelectorAll('.run-analyzer-btn').forEach(btn => btn.classList.toggle('hidden', e.target.checked)); });
+            runOrchestratorBtn.addEventListener('click', runOrchestration);
+            orchestratorContainer.classList.remove('hidden');
+            // Nav links
+            navLinks.forEach(link => link.addEventListener('click', e => {
+                e.preventDefault(); const targetId = e.currentTarget.dataset.target;
+                navLinks.forEach(l => l.classList.remove('active')); allPages.forEach(p => p.classList.remove('active'));
+                e.currentTarget.classList.add('active'); document.getElementById(targetId).classList.add('active');
+                sidebar.classList.add('-translate-x-full'); // Close mobile menu on nav
+            }));
+        }
+        
+        setupPage();
+    </script>
+</body>
+</html>
